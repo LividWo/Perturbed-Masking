@@ -10,6 +10,25 @@ We cleaned and migrated the codes so that it works under the latest version of h
 
 If you encountered with any problem, please report in "Issues".
 
+## Quick Start 
+
+After clone the repo, you can simply run the following command to try a dependency probe on PUD dataset.
+
+- Get impact matrix, take PUD dataset for example
+```
+python preprocess.py --cuda \
+    --probe dependency \
+    --data_split PUD \
+    --dataset ./dependency/data/PUD.conllu 
+```
+- Now we do parsing, using Eisner algo
+```
+python parsing.py --probe dependency \
+    --matrix ./results/dependency/bert-dist-PUD-12.pkl \
+    --decoder eisner
+```  
+
+Run the above command should give you an UAS of 41.7 (See Paper Tabel 1)
 
 ## Download dataset
 
@@ -27,21 +46,8 @@ Down load the Penn Treebank corpus from LDC, and follow the dummy dirs/files in 
 Download the SciDTB dataset from https://github.com/PKU-TANGENT/SciDTB, put the folder under 'discourse/'
 
 ## Dependency Probe
-- Get impact matrix, take PUD dataset for example
-```
-python preprocess.py --cuda \
-    --probe dependency \
-    --data_split PUD \
-    --dataset ./dependency/data/PUD.conllu 
-```
-- Now we do parsing, using Eisner algo
-```
-python parsing.py --probe dependency \
-    --matrix ./results/dependency/bert-dist-PUD-12.pkl \
-    --decoder eisner
-```  
 
-Run the above command should give you an UAS of 41.7 (See Paper Tabel 1)
+See Quick Start
 
 ## Constituency Probe
 - Get impact matrix, take WSJ23 dataset for example
