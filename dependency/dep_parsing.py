@@ -1,10 +1,17 @@
-from dependency.evaluation import new_evaluation, tag_evaluation, distance_analysis, distance_tag_analysis, no_punc_evaluation
 import argparse
 from tqdm import tqdm
 import numpy as np
 import pickle
-from dependency import DependencyDecoder, chuliu_edmonds
+from .eisner import Eisner
+from .standfordMST import chuliu_edmonds
+from .evaluation import _evaluation
 import unicodedata
+
+
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=1)
 
 
 def find_root(parse):
@@ -68,7 +75,7 @@ def decoding(args):
     with open(args.matrix, 'rb') as f:
         results = pickle.load(f)
     new_results = []
-    decoder = DependencyDecoder()
+    decoder = Eisner()
     root_found = 0
 
     for (line, tokenized_text, matrix_as_list) in tqdm(results):
@@ -89,12 +96,7 @@ def decoding(args):
             for j in range(0, len(line) - 1):
                 buf.append(line[j])
                 if mapping[j] != mapping[j + 1]:
-                    if args.subword == 'max':
-                        new_row.append(max(buf))
-                    elif args.subword == 'avg':
-                        new_row.append((sum(buf) / len(buf)))
-                    elif args.subword == 'first':
-                        new_row.append(buf[0])
+                    new_row.append(buf[0])
                     buf = []
             merge_column_matrix.append(new_row)
 
@@ -109,8 +111,8 @@ def decoding(args):
             for j in range(0, len(line) - 1):
                 buf.append(line[j])
                 if mapping[j] != mapping[j + 1]:
-                    if args.subword == 'max':
-                        new_row.append(max(buf))
+                    if args.subword == 'sum':
+                        new_row.append(sum(buf))
                     elif args.subword == 'avg':
                         new_row.append((sum(buf) / len(buf)))
                     elif args.subword == 'first':
@@ -128,26 +130,11 @@ def decoding(args):
 
         new_results.append((orginal_line, tokenized_text, matrix_as_list))
 
-        if args.favor_local:
-            weight = 0.001
-            dist_mat = np.zeros(final_matrix.shape)
-            n = final_matrix.shape[0]
-            for i, row in enumerate(dist_mat):
-                for j, cell in enumerate(row):
-                    dist_mat[i, j] = abs(j-i)
-                    # dist_mat[i, j] = abs(j-i)/n
-
-            dist_mat = weight*dist_mat
-
-        if args.decoder == 'mst':
-            C_x_j = int(np.argmax(np.sum(final_matrix, axis=0)))
+        if args.decoder == 'cle':
             final_matrix[0] = 0
             if root and args.root == 'gold':
                 final_matrix[root] = 0
                 final_matrix[root, 0] = 1
-            if args.root == 'cls':
-                final_matrix[C_x_j] = 0
-                final_matrix[C_x_j, 0] = 1
             # final_matrix /= np.sum(final_matrix, axis=1, keepdims=True)
 
             best_heads = chuliu_edmonds(final_matrix)
@@ -157,22 +144,10 @@ def decoding(args):
             if root and args.root == 'gold':
                 final_matrix[root] = 0
                 final_matrix[root, 0] = 1
-            C_x_j = int(np.argmax(np.sum(final_matrix, axis=0)))
-            if args.root == 'cls':
-                final_matrix[C_x_j] = 0
-                final_matrix[C_x_j, 0] = 1
-            else:
-                final_matrix[0] = .1
                 final_matrix[0, 0] = 0
-            final_matrix /= np.sum(final_matrix, axis=1, keepdims=True)
-            final_matrix = final_matrix.transpose()
 
-            if args.favor_local:
-                final_matrix += dist_mat
-                # final_matrix = np.where(final_matrix < 0, 0.0001, final_matrix)
-                # for i, row in enumerate(final_matrix):
-                #     for j, cell in enumerate(row):
-                #         final_matrix[i,j] *= dist_mat[i,j]
+            final_matrix = softmax(final_matrix)
+            final_matrix = final_matrix.transpose()
 
             best_heads, _ = decoder.parse_proj(final_matrix)
             for i, head in enumerate(best_heads):
@@ -180,46 +155,8 @@ def decoding(args):
                     root_found += 1
             trees.append([(i, head) for i, head in enumerate(best_heads)])
         if args.decoder == 'right_chain':
-            # trees.append([(root, 0) if i == root else (i, i + 1) for i in range(0, final_matrix.shape[0])])
-            trees.append([(i, i + 1) for i in range(0, final_matrix.shape[0])])
-        if args.decoder == 'left_chain':
-            # trees.append([(root, 0) if i == root else (i, i - 1) for i in range(0, final_matrix.shape[0])])
-            trees.append([ (i, i - 1) for i in range(0, final_matrix.shape[0])])
-        if args.decoder == 'random':
-            random_matrix = np.random.rand(final_matrix.shape[0], final_matrix.shape[0])
-            # if root and args.root == 'gold':
-            #     random_matrix[root] = 0
-            #     random_matrix[root, 0] = 1
-            best_heads, _ = decoder.parse_proj(random_matrix)
-            trees.append([(i, head) for i, head in enumerate(best_heads)])
-        if args.decoder == 'rosa':
-            sent_scores = final_matrix.sum(axis=0)[1:] # remove [CLS]
-            sent_root = -1
-            edges = [(0,0)]
-            for rosa_id in range(sent_scores.shape[0]):
-                parent = -1
-                for potential_parent in range(rosa_id, sent_scores.shape[0]):
-                    if sent_scores[rosa_id] < sent_scores[potential_parent]:
-                        parent = potential_parent
-                        break
-                if parent == -1:
-                    parent = sent_root
-                if parent == -1:
-                    sent_root = rosa_id
-                edges.append((rosa_id+1, parent+1))
-            trees.append(edges)
-        if args.decoder == 'clark':
-            # final_matrix /= np.sum(final_matrix, axis=1, keepdims=True)
-            # final_matrix = final_matrix.transpose()
-            heads = [(0, 0)]
-            most_imp_word = np.argmax(final_matrix[0])
-            for i in range(1, final_matrix.shape[0]):
-                row = final_matrix[i]
-                head_of_row = np.argmax(row)
-                heads.append((i, head_of_row))
-            heads[root] = (root, 0)
-            trees.append(heads)
-    print("found root: ", root_found, len(trees))
+            trees.append([(root, 0) if i == root else (i, i + 1) for i in range(0, final_matrix.shape[0])])
+            # trees.append([(i, i + 1) for i in range(0, final_matrix.shape[0])])
     return trees, new_results, deprels
 
 
@@ -227,7 +164,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Data args
-    parser.add_argument('--matrix', default='./results/PUD/bert-base-uncased-False-dist-12.pkl')
+    parser.add_argument('--matrix', default='../results/dependency/bert-dist-last_layer.pkl')
     # parser.add_argument('--matrix', default='./results/WSJ10/bert-base-uncased-False-diff.pkl')
     # parser.add_argument('--matrix', default='./results/WSJ10/bert-base-uncased-False-dist-12.pkl')
 
@@ -235,12 +172,11 @@ if __name__ == '__main__':
     parser.add_argument('--decoder', default='eisner')
     parser.add_argument('--root', default='gold', help='gold or cls')
     parser.add_argument('--subword', default='first')
-    parser.add_argument('--favor_local', action='store_true')
 
     args = parser.parse_args()
     print(args)
     trees, results, deprels = decoding(args)
-    new_evaluation(trees, results)
+    _evaluation(trees, results)
     # distance_analysis(trees, results)
     # distance_tag_analysis(trees, results, deprels)
     # tag_evaluation(trees, results, deprels)

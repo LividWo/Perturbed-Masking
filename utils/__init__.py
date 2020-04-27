@@ -1,2 +1,2 @@
-from utils.tokens import UToken
-from utils.conlludataset import ConllUDataset
+from .tokens import UToken
+from .conlludataset import ConllUDataset

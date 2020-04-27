@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class DependencyDecoder(object):
+class Eisner(object):
     """
     Dependency decoder class
     """
@@ -134,6 +134,6 @@ if __name__ == '__main__':
          0.14592798150362726, 0.0]
     ]
     scores = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-    decoder = DependencyDecoder()
+    decoder = Eisner()
     scores = np.array(scores)
     best_arcs, root_pred = decoder.parse_proj_no_root(scores)

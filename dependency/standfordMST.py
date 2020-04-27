@@ -1,6 +1,7 @@
 import numpy as np
 from collections import defaultdict
 
+
 # ***************************************************************
 def tarjan(tree):
     """"""
@@ -49,7 +50,6 @@ def tarjan(tree):
 
 
 # ===============================================================
-# NOTE: i'm so sorry --Tim
 def chuliu_edmonds(scores):
     """"""
 
@@ -305,5 +305,4 @@ def example3():
 # ***************************************************************
 if __name__ == '__main__':
     """"""
-
     example1()
