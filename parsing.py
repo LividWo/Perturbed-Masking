@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('--matrix', default='./results/discourse/bert-dist-SciDTB-last.pkl')
     parser.add_argument('--probe', default='discourse', choices=['dependency', 'constituency', 'discourse'])
     parser.add_argument('--decoder', default='eisner', choices=['eisner', 'cle', 'right_chain',
-                                                                'top_down', 'right_branching', 'left_branching'])
+                                                                'top_down', 'mart', 'right_branching', 'left_branching'])
     parser.add_argument('--subword', default='avg', choices=['first', 'avg', 'max'])
     parser.add_argument('--root', default='gold', help='use gold root as init')
 
